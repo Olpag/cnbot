@@ -2,48 +2,53 @@ package helpers_test
 
 import (
 	"bytes"
+	"io/ioutil"
 	"testing"
 
 	"github.com/michurin/cnbot/pkg/helpers"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
-func TestMessageType(t *testing.T) {
-	t.Parallel()
-	for _, c := range []struct {
-		name string
-		b    string
-		ig   bool
-		txt  string
-		md   bool
-	}{
-		{"empty", "", false, "_empty_", true},
-		{"space", " \n ", false, "_empty_", true},
-		{"dot", ".", true, "", false},
-		{"dot_space", " \n. ", true, "", false},
-		{"text", "text", false, "text", false},
-		{"text_space", "\n text \n", false, "\n text \n", false},
-		{"pre_empty", "%!PRE", false, "_empty \\(pre mode\\)_", true},
-		{"pre_empty_ctl", "%!PRE\n\n", false, "_empty \\(pre mode\\)_", true},
-		{"pre_space", "%!PRE\n \n", false, "```\n \n\n```", true},
-		{"pre_space_same_line", "%!PRE \n \n", false, "```\n \n \n\n```", true},
-		{"pre_one_line", "%!PRE ONE", false, "```\n ONE\n```", true},
-		{"pre_escape", "%!PRE_ONE", false, "```\n\\_ONE\n```", true},
-		{"md_empty", "%!MARKDOWN", false, "_empty \\(markdown mode\\)_", true},
-		{"md_empty_ctl", "%!MARKDOWN\n\n", false, "_empty \\(markdown mode\\)_", true},
-		{"md_space", "%!MARKDOWN\n \n", false, " \n", true},
-		{"md_space_same_line", "%!MARKDOWN \n \n", false, " \n \n", true},
-		{"md_one_line", "%!MARKDOWN ONE", false, " ONE", true},
-	} {
+type testCase struct {
+	Name    string
+	Message string
+	Exp     struct {
+		Text         string
+		Ignore       bool
+		Markdown     bool
+		Update       bool
+		Markup       [][][2]string
+		CallbackText string `yaml:"callback_text"`
+		IsAlert      bool   `yaml:"is_alert"`
+	}
+}
+
+func TestMessageType_ok(t *testing.T) {
+	data, err := ioutil.ReadFile("test_data/message_type.yaml")
+	require.NoError(t, err)
+	cc := []testCase(nil)
+	err = yaml.Unmarshal(data, &cc)
+	require.NoError(t, err)
+	for _, c := range cc {
 		c := c
-		t.Run(c.name, func(t *testing.T) {
-			ig, txt, md, err := helpers.MessageType([]byte(c.b))
-			assert.Nil(t, err)
-			assert.Equal(t, c.ig, ig)
-			assert.Equal(t, c.txt, txt)
-			assert.Equal(t, c.md, md)
+		t.Run(c.Name, func(t *testing.T) {
+			ig, txt, md, up, mu, cbt, isa, err := helpers.MessageType([]byte(c.Message))
+			assert.NoError(t, err)
+			assert.Equal(t, c.Exp.Text, txt)
+			assert.Equal(t, c.Exp.Ignore, ig)
+			assert.Equal(t, c.Exp.Markdown, md)
+			assert.Equal(t, c.Exp.Update, up)
+			assert.Equal(t, c.Exp.Markup, mu)
+			assert.Equal(t, c.Exp.CallbackText, cbt)
+			assert.Equal(t, c.Exp.IsAlert, isa)
 		})
 	}
+}
+
+func TestMessageType_error(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name string
 		b    []byte
@@ -53,11 +58,15 @@ func TestMessageType(t *testing.T) {
 	} {
 		c := c
 		t.Run(c.name, func(t *testing.T) {
-			ig, txt, md, err := helpers.MessageType(c.b)
+			ig, txt, md, up, mu, cbt, isa, err := helpers.MessageType(c.b)
 			assert.NotNil(t, err)
+			assert.Nil(t, mu)
+			assert.False(t, up)
 			assert.Equal(t, true, ig)
 			assert.Equal(t, "", txt)
 			assert.Equal(t, false, md)
+			assert.Empty(t, cbt)
+			assert.Empty(t, isa)
 		})
 	}
 }

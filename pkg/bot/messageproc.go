@@ -16,35 +16,59 @@ func argsSafe(s string) []string {
 	return safeChars.FindAllString(strings.ToLower(s), -1)
 }
 
+func msgType(isCallback bool) string {
+	if isCallback {
+		return "callback"
+	}
+	return "message"
+}
+
+func appendIfNotEmpty(a []string, x ...string) []string {
+	for i := 1; i < len(x); i += 2 {
+		if x[i] != "" {
+			a = append(a, x[i-1], x[i])
+		}
+	}
+	return a
+}
+
+func boolToString(a bool) (r string) {
+	if a {
+		r = "TRUE"
+	}
+	return
+}
+
 func envList(m tg.Message, target int64, server string) []string {
 	e := []string{
-		"BOT_NAME",
-		m.BotName,
-		"BOT_FROM",
-		hps.Itoa(target),
-		"BOT_FROM_FIRSTNAME",
-		m.FromFirstName,
-		"BOT_CHAT",
-		hps.Itoa(m.ChatID),
-		"BOT_TEXT",
-		m.Text,
-	}
-	if server != "" {
-		e = append(e,
-			"BOT_SERVER",
-			server,
-		)
+		"BOT_VERSION", Version,
+		"BOT_NAME", m.BotName,
+		"BOT_FROM", hps.Itoa(target),
+		"BOT_FROM_FIRST_NAME", m.FromFirstName,
+		"BOT_CHAT", hps.Itoa(m.ChatID),
+		"BOT_TEXT", m.Text,
+		"BOT_MESSAGE_TYPE", msgType(m.CallbackID != ""),
 	}
 	if m.SideType != "" {
 		e = append(e,
-			"BOT_SIDE_TYPE",
-			m.SideType,
-			"BOT_SIDE_ID",
-			hps.Itoa(m.SideID),
-			"BOT_SIDE_NAME",
-			m.SideName,
+			"BOT_SIDE_TYPE", m.SideType,
+			"BOT_SIDE_ID", hps.Itoa(m.SideID),
+			"BOT_SIDE_NAME", m.SideName,
 		)
 	}
+	e = appendIfNotEmpty(e,
+		"BOT_SERVER", server,
+		"BOT_FROM_LAST_NAME", m.FromLastName,
+		"BOT_FROM_USERNAME", m.FromUsername,
+		"BOT_FROM_LANGUAGE", m.FromLanguage,
+		"BOT_FROM_IS_BOT", boolToString(m.FromIsBot),
+		"BOT_LOCATION_LONGITUDE", m.LocationLongitude,
+		"BOT_LOCATION_LATITUDE", m.LocationLatitude,
+		"BOT_LOCATION_ACCURACY", m.LocationHorizontalAccuracy,
+		"BOT_LOCATION_LIVE_PERIOD", m.LocationLivePeriod,
+		"BOT_LOCATION_HEADING", m.LocationHeading,
+		"BOT_LOCATION_ALERT_RADIUS", m.LocationProximityAlertRadius,
+	)
 	return e
 }
 
@@ -57,7 +81,7 @@ func process(ctx context.Context, botMap map[string]hps.BotConfig, m tg.Message)
 		hps.Log(ctx, fmt.Errorf("bot `%s` is not known", m.BotName))
 		return
 	}
-	if _, ok := bot.AllowedUsers[target]; !ok {
+	if !bot.Access.IsAllowed(target) {
 		hps.Log(ctx, fmt.Errorf("user %d is not allowed", target))
 		return
 	}
@@ -75,7 +99,7 @@ func process(ctx context.Context, botMap map[string]hps.BotConfig, m tg.Message)
 		return
 	}
 	hps.Log(ctx, "script output:", stdout)
-	err = SmartSend(ctx, bot.Token, target, stdout)
+	err = SmartSend(ctx, bot.Token, m.CallbackID, target, m.UpdateMessageID, stdout, "")
 	if err != nil {
 		hps.Log(ctx, err)
 		return

@@ -12,36 +12,6 @@ import (
 	"github.com/michurin/cnbot/pkg/tg"
 )
 
-const version = "1.0.0"
-
-var /* const */ Build = "noBuildInfo" // go build -ldflags "-X github.com/michurin/cnbot/pkg/bot.Build=`date +%F`-`git rev-parse --short HEAD`" ./cmd/...
-
-func allowedUsersToString(a map[int64]struct{}) string {
-	if len(a) == 0 {
-		return " empty (nobody can use this bot)"
-	}
-	v := make([]int64, len(a))
-	i := 0
-	for k := range a {
-		v[i] = k
-		i++
-	}
-	sort.Slice(v, func(i, j int) bool { return v[i] < v[j] })
-	w := make([]string, len(v))
-	sep := ""
-	if len(v) < 10 {
-		for i, u := range v {
-			w[i] = " " + hps.Itoa(u)
-		}
-		sep = ","
-	} else {
-		for i, u := range v {
-			w[i] = "\n      - " + hps.Itoa(u)
-		}
-	}
-	return strings.Join(w, sep)
-}
-
 func serverConfigurationToString(addr string, w, r time.Duration) string {
 	if addr == "" {
 		return " server is not configured"
@@ -101,27 +71,20 @@ func BotsReport(rootCtx context.Context, cfgs map[string]hps.BotConfig) string {
 	for i, nick := range nicks {
 		ctx := hps.Label(rootCtx, nick)
 		c := cfgs[nick]
-		reports[i] = fmt.Sprintf(`- version: %s-%s
-- go version: %s / %s / %s
-- nickname: %q
+		reports[i] = fmt.Sprintf(`- nickname: %q
   - bot info:%s
     - web hook: %s
   - configuration:
-    - allowed users:%s
+    - allowed users: %s
     - script:
       - script: %q
       - working dir: %q
       - timeouts: %v, %v, %v (term/kill/wait)
     - server:%s`,
-			version,
-			Build,
-			runtime.Version(),
-			runtime.GOOS,
-			runtime.GOARCH,
 			nick,
 			botInfo(ctx, c.Token),
 			botWebHook(ctx, c.Token),
-			allowedUsersToString(c.AllowedUsers),
+			c.Access.String(),
 			c.Script,
 			c.WorkingDir,
 			c.ScriptTermTimeout,
@@ -129,5 +92,12 @@ func BotsReport(rootCtx context.Context, cfgs map[string]hps.BotConfig) string {
 			c.ScriptWaitTimeout,
 			serverConfigurationToString(c.BindAddress, c.WriteTimeout, c.ReadTimeout))
 	}
-	return strings.Join(reports, "\n")
+	return fmt.Sprintf(`- version: %s
+- go version: %s / %s / %s
+%s`,
+		Version,
+		runtime.Version(),
+		runtime.GOOS,
+		runtime.GOARCH,
+		strings.Join(reports, "\n"))
 }
